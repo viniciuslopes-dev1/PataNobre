@@ -1,0 +1,160 @@
+:root {
+    color-scheme: light;
+    --fundo: #f5f4f1;
+    --papel: #fff;
+    --texto: #29231f;
+    --suave: #695e55;
+    --borda: #e5dfd8;
+    --marca: #94401e;
+}
+
+/* Ajustes do layout: cabeçalho horizontal e conteúdo centralizado. */
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--fundo); color: var(--texto); font: .95rem/1.5 system-ui, sans-serif; }
+a { color: var(--marca); text-underline-offset: .2em; }
+h1, h2, p, form { margin: 0; }
+h1 { font-size: clamp(1.7rem, 3vw, 2.1rem); letter-spacing: -.035em; line-height: 1.16; }
+h2 { font-size: 1rem; line-height: 1.3; }
+svg { display: block; width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.icones { position: absolute; width: 0; height: 0; overflow: hidden; }
+:focus-visible { outline: 2px solid #9b4b24; outline-offset: 3px; }
+
+.tela-login { display: grid; place-items: center; padding: 1.1rem; }
+.tela-login main { width: min(100%, 400px); }
+.acesso { background: var(--papel); border: 1px solid var(--borda); border-top: 3px solid var(--marca); border-radius: .8rem; padding: clamp(1.25rem, 6vw, 2rem); box-shadow: 0 8px 22px #3926190a; }
+.logo-login { display: block; width: 9rem; height: auto; margin-bottom: 1.1rem; }
+.acesso h1 { font-size: 1.62rem; }
+.descricao { margin-top: .38rem; color: var(--suave); }
+.acesso .formulario { margin-top: 1.5rem; }
+.acesso .formulario button { width: 100%; margin-top: .25rem; }
+
+.aplicativo { display: grid; grid-template-columns: 214px minmax(0, 1fr); }
+.barra { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; padding: 1.35rem .9rem 1rem; background: #29231f; color: #fff9f4; }
+.marca { display: flex; align-items: center; gap: .72rem; padding: .15rem .45rem 1.6rem; color: inherit; text-decoration: none; font-weight: 730; line-height: 1.25; }
+.marca small { display: block; margin-top: .12rem; color: #cbbeb3; font-size: .72rem; font-weight: 500; }
+.marca-sigla { display: grid; place-items: center; width: 2.35rem; aspect-ratio: 1; border-radius: .48rem; color: #2f1b10; background: #e3aa80; font-size: .79rem; letter-spacing: .05em; }
+.barra nav { display: grid; gap: .23rem; }
+.barra nav a, .sair { display: flex; align-items: center; gap: .62rem; min-height: 42px; padding: .62rem .68rem; border-radius: .45rem; color: #e4d9d0; text-decoration: none; font-size: .89rem; }
+.barra nav a:hover, .sair:hover { background: #3b322c; color: #fff; }
+.barra nav a[aria-current="page"] { background: #49352b; color: #ffdbbf; font-weight: 700; }
+.barra :focus-visible { outline-color: #f4ba92; }
+.sessao { margin-top: auto; padding-top: .9rem; border-top: 1px solid #4d4139; }
+.conta { display: block; padding: .15rem .65rem; color: #cbbeb3; font-size: .76rem; overflow-wrap: anywhere; }
+.sair { width: 100%; border: 0; background: transparent; justify-content: start; }
+
+.aplicativo main { min-width: 0; width: min(100%, 1360px); padding: clamp(1rem, 3vw, 2.65rem); margin-inline: auto; }
+.cabecalho { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .9rem; margin-bottom: 1.55rem; }
+.quadro { min-width: 0; background: var(--papel); border: 1px solid var(--borda); border-radius: .7rem; }
+.quadro-topo { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .4rem .9rem; padding: 1rem 1.15rem; border-bottom: 1px solid var(--borda); }
+.quadro-topo a { font-size: .86rem; font-weight: 650; }
+.registros { display: grid; grid-template-columns: minmax(245px, 300px) minmax(0, 1fr); align-items: start; gap: 1rem; }
+.cadastro { padding: 1.15rem; }
+.cadastro h2 { margin-bottom: 1rem; scroll-margin-top: 1rem; }
+.contagem { min-width: 1.9rem; padding: .13rem .45rem; text-align: center; border: 1px solid var(--borda); border-radius: .4rem; color: var(--suave); font-size: .79rem; }
+.vazio { padding: 1.4rem 1.15rem; color: var(--suave); }
+
+.formulario { display: grid; gap: .8rem; }
+label { display: grid; gap: .28rem; color: var(--texto); font-size: .86rem; font-weight: 660; }
+input, select, textarea { width: 100%; min-width: 0; min-height: 42px; padding: .54rem .65rem; background: #fff; color: inherit; border: 1px solid #cfc5bc; border-radius: .42rem; font: 400 1rem/1.35 system-ui, sans-serif; }
+textarea { resize: vertical; }
+button, .botao { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; width: fit-content; min-height: 40px; padding: .54rem .8rem; border: 1px solid transparent; border-radius: .43rem; background: var(--marca); color: white; cursor: pointer; text-decoration: none; font: 680 .86rem/1.35 system-ui, sans-serif; }
+button:hover, .botao:hover { background: #733017; }
+.acoes { display: flex; align-items: center; flex-wrap: wrap; gap: .48rem .7rem; }
+.aviso, .erro { margin: .75rem 0; padding: .68rem .8rem; border-radius: .4rem; font-size: .88rem; }
+.aviso { background: #eaf3ec; color: #30533a; }
+.erro { background: #fae8e8; color: #7b2629; }
+
+.rolagem { overflow-x: auto; border-radius: 0 0 .7rem .7rem; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { padding: .75rem .8rem; border-bottom: 1px solid var(--borda); text-align: left; vertical-align: middle; }
+th { background: #f9f7f4; color: var(--suave); font-size: .76rem; font-weight: 680; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #fcfaf7; }
+td strong, td small { display: block; overflow-wrap: anywhere; }
+td small { color: var(--suave); }
+.data { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.acoes { display: table-cell; white-space: nowrap; }
+td form { display: inline-block; margin-left: .15rem; }
+td a, .excluir { font-size: .8rem; }
+.excluir { min-height: 32px; padding: .3rem .45rem; background: transparent; color: #8c3131; border-color: transparent; }
+.excluir:hover { background: #faeded; }
+.status { display: inline-block; padding: .2rem .48rem; border-radius: .35rem; font-size: .74rem; font-weight: 650; white-space: nowrap; }
+.pendente { color: #654416; background: #f8eed9; }
+.confirmado { color: #24533e; background: #e6f2e9; }
+.concluido { color: #334e68; background: #e9eff6; }
+.cancelado { color: #812f35; background: #f8e7e9; }
+
+@media (max-width: 1080px) {
+    .registros { grid-template-columns: minmax(0, 1fr); }
+    .cadastro .formulario { max-width: 34rem; }
+}
+@media (max-width: 700px) {
+    .aplicativo { grid-template-columns: minmax(0, 1fr); }
+    .barra { position: static; display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; padding: .75rem 1rem; gap: .55rem; }
+    .marca { padding: 0; }
+    .barra nav { grid-column: 1 / -1; grid-row: 2; display: flex; flex-wrap: wrap; gap: .2rem; }
+    .barra nav a { padding: .5rem; }
+    .sessao { grid-column: 2; grid-row: 1; padding: 0; border: 0; }
+    .conta { display: none; }
+    .sair { min-height: 38px; }
+}
+@media (max-width: 360px) {
+    .barra nav a { font-size: .8rem; gap: .3rem; }
+}
+
+.feedback-area { position: fixed; right: 20px; bottom: 20px; z-index: 100; width: min(390px, calc(100% - 32px)); }
+.feedback { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: #fff; color: #303438; border: 1px solid #d8dddf; border-left: 4px solid #4d805c; border-radius: 5px; box-shadow: 0 4px 18px #0002; font-size: 14px; line-height: 1.5; }
+.feedback[data-tipo="erro"] { border-left-color: #ad3f36; }
+.feedback[data-tipo="info"] { border-left-color: #d99648; }
+.feedback .feedback-fechar { flex: none; margin-left: auto; padding: 4px 9px; min-height: 32px; background: transparent; color: #555; border: 0; font-size: 23px; line-height: 1; }
+.feedback .feedback-fechar:hover { background: #f1f3f4; }
+body { background: #f1f3f4; color: #303438; font-family: Arial, sans-serif; }
+.aplicativo { display: block; }
+.barra { position: static; display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 2rem; min-height: 0; padding: 12px max(24px, calc((100% - 1080px)/2)); background: white; color: #34383b; border-bottom: 3px solid #d99648; }
+.marca { padding: 0; flex: none; }
+.logo-menu { display: block; width: 112px; height: auto; }
+.barra nav { display: flex; gap: 6px; flex: 1; }
+.barra nav a { color: #53595d; border-radius: 3px; padding: 11px 14px; }
+.barra nav a:hover { color: #503016; background: #faf2e6; }
+.barra nav a[aria-current="page"] { background: #fff1dd; color: #76481f; box-shadow: inset 0 -2px #d99648; }
+.sessao { margin: 0; padding: 0; border: 0; display: flex; align-items: center; gap: 8px; }
+.conta { color: #666; max-width: 150px; }
+.sair { color: #555; border: 1px solid #ddd; border-radius: 4px; }
+.sair:hover { background: #f4f4f4; color: #333; }
+.barra :focus-visible { outline-color: #85521c; }
+.aplicativo main { max-width: 1128px; padding: 34px 24px 60px; }
+h1 { font-size: 26px; letter-spacing: -.5px; font-weight: 600; }
+.cabecalho { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid #d9dddf; }
+.descricao { color: #6c7276; font-size: 14px; }
+.quadro { border-color: #d8dddf; border-radius: 5px; }
+.quadro-topo { padding: 18px 20px; border-color: #e2e5e7; }
+.quadro-topo h2 { font-size: 16px; font-weight: 600; }
+.quadro-topo a { color: #815020; font-weight: 500; }
+.rolagem { border-radius: 0 0 5px 5px; }
+th { background: #f5f6f7; color: #5c6368; font-size: 13px; font-weight: 600; }
+th, td { padding: 16px 20px; border-color: #e7e9eb; }
+td { font-size: 14px; }
+td strong { font-weight: 600; }
+td small { color: #73797c; margin-top: 2px; }
+tbody tr:hover { background: #fffcf7; }
+button, .botao { border-radius: 4px; background: #965b27; font-weight: 600; }
+.sair, .excluir { background: transparent; }
+.cadastro { padding: 20px; }
+input, select, textarea { border-color: #cbd0d3; border-radius: 4px; }
+.status { border-radius: 3px; padding: 4px 8px; font-weight: 500; }
+.vazio { padding: 35px 20px; color: #73797c; }
+.tela-login { background: #f1f3f4; }
+.acesso { border-radius: 5px; border-color: #d8dddf; border-top: 3px solid #d99648; box-shadow: none; }
+.logo-login { margin: 0 auto 24px; width: 132px; }
+.acesso h1 { font-size: 23px; }
+@media (max-width: 800px) {
+    .barra { padding: 12px 20px; gap: 12px; justify-content: space-between; }
+    .barra nav { order: 3; flex-basis: 100%; border-top: 1px solid #eee; padding-top: 8px; }
+    .sessao { margin-left: auto; }
+    .conta { display: none; }
+    .aplicativo main { padding: 24px 16px 40px; }
+    .logo-menu { width: 90px; }
+}
+@media (max-width: 360px) {
+    .barra nav a { padding: 10px 8px; }
+}

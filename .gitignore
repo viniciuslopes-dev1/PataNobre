@@ -1,0 +1,11 @@
+# Configuração local
+config.php
+.env
+.env.*
+!.env.example
+
+# Arquivos temporários
+*.log
+*.zip
+.DS_Store
+Thumbs.db
