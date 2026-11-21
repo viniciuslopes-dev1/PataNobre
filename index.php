@@ -17,8 +17,8 @@ function campo(string $nome): string
 
 function mensagem(string $texto, string $tipo = 'sucesso'): void
 {
-    $_SESSION['aviso_vetcare'] = $texto;
-    $_SESSION['tipo_aviso_vetcare'] = $tipo;
+    $_SESSION['aviso'] = $texto;
+    $_SESSION['tipo_aviso'] = $tipo;
 }
 
 // Conta caracteres acentuados sem depender da extensão mbstring.
@@ -28,26 +28,46 @@ function tamanho(string $texto): int
     return $quantidade === false ? PHP_INT_MAX : $quantidade;
 }
 
-$pagina = $_GET['pagina'] ?? 'login';
-if (!in_array($pagina, ['login', 'painel', 'usuarios', 'agendamentos'], true)) {
-    $pagina = 'login';
+function sair_da_sessao(): void
+{
+    $_SESSION = [];
+    session_regenerate_id(true);
 }
-if (in_array($pagina, ['painel', 'usuarios', 'agendamentos'], true) && !logged_in()) {
+
+// Serviços oferecidos: aparecem na página inicial e no formulário de agendamento.
+$servicos = [
+    'Banho' => 'Banho com produtos adequados ao tipo de pelagem.',
+    'Tosa' => 'Tosa higiênica ou completa, na máquina ou na tesoura.',
+    'Banho e tosa' => 'O pacote completo para o pet sair cheiroso e bem cuidado.',
+    'Corte de unhas' => 'Corte cuidadoso para o conforto do pet.',
+    'Hidratação' => 'Tratamento para deixar os pelos macios e brilhantes.',
+    'Limpeza de ouvidos' => 'Higiene das orelhas com produtos próprios.',
+    'Escovação de dentes' => 'Ajuda a prevenir o mau hálito e o tártaro.',
+];
+$statusLista = ['Agendado', 'Confirmado', 'Concluído', 'Cancelado'];
+
+$pagina = $_GET['pagina'] ?? 'inicio';
+if (!in_array($pagina, ['inicio', 'login', 'painel', 'usuarios', 'agendamentos'], true)) {
+    $pagina = 'inicio';
+}
+$paginaInterna = in_array($pagina, ['painel', 'usuarios', 'agendamentos'], true);
+if ($paginaInterna && !logged_in()) {
     ir('login');
 }
 if ($pagina === 'login' && logged_in()) {
     ir('painel');
 }
 
-$_SESSION['token_vetcare'] ??= bin2hex(random_bytes(32));
-$token = $_SESSION['token_vetcare'];
+$_SESSION['token'] ??= bin2hex(random_bytes(32));
+$token = $_SESSION['token'];
 $erro = '';
 $editar = null;
+$registro = null;
+$ehAdmin = false;
 $id = 0;
 $registros = [];
 $proximos = [];
 $falhaBanco = false;
-$statusLista = ['Agendado', 'Confirmado', 'Concluído', 'Cancelado'];
 $metodoPost = $_SERVER['REQUEST_METHOD'] === 'POST';
 
 if (in_array($pagina, ['usuarios', 'agendamentos'], true)) {
@@ -60,168 +80,180 @@ if (in_array($pagina, ['usuarios', 'agendamentos'], true)) {
     }
 }
 
-if ($metodoPost) {
-    if (!hash_equals($token, campo('token'))) {
-        http_response_code(400);
-        $erro = 'Este formulário expirou. Confira os dados e tente novamente.';
-        $metodoPost = false; // Não executa nenhuma alteração com token inválido.
-    }
+if ($metodoPost && !hash_equals($token, campo('token'))) {
+    http_response_code(400);
+    $erro = 'Este formulário expirou. Confira os dados e tente novamente.';
+    $metodoPost = false; // Não executa nenhuma alteração com token inválido.
 }
 
-if ($metodoPost) {
-    if ($pagina === 'painel' && campo('acao') === 'sair') {
-        $_SESSION = [];
-        session_regenerate_id(true);
-        mensagem('Você saiu do sistema.');
-        ir('login');
-    }
+if ($metodoPost && $pagina === 'painel' && campo('acao') === 'sair') {
+    sair_da_sessao();
+    mensagem('Você saiu do sistema.');
+    ir('login');
 }
 
 try {
-// Uma conta excluída não deve continuar acessando por uma sessão antiga.
-if (logged_in()) {
-    $consulta = db()->prepare('SELECT nome FROM usuarios WHERE id = ?');
-    $consulta->execute([$_SESSION['usuario']['id']]);
-    $contaAtual = $consulta->fetch();
-    if (!$contaAtual) {
-        $_SESSION = [];
-        session_regenerate_id(true);
-        ir('login');
+    // Atualiza nome e perfil a cada acesso. Uma conta excluída perde o acesso na hora.
+    if (logged_in()) {
+        $consulta = db()->prepare('SELECT nome, admin FROM usuarios WHERE id = ?');
+        $consulta->execute([$_SESSION['usuario']['id']]);
+        $contaAtual = $consulta->fetch();
+        if (!$contaAtual) {
+            sair_da_sessao();
+            ir('login');
+        }
+        $_SESSION['usuario']['nome'] = $contaAtual['nome'];
+        $_SESSION['usuario']['admin'] = (bool) $contaAtual['admin'];
     }
-    $_SESSION['usuario']['nome'] = $contaAtual['nome'];
-}
+    $ehAdmin = !empty($_SESSION['usuario']['admin']);
 
-if ($metodoPost) {
-    if ($pagina === 'login') {
-        $consulta = db()->prepare('SELECT id, nome, senha FROM usuarios WHERE usuario = ?');
+    if ($pagina === 'usuarios' && !$ehAdmin) {
+        mensagem('Somente o administrador pode gerenciar usuários.', 'erro');
+        ir('painel');
+    }
+
+    if ($metodoPost && $pagina === 'login') {
+        $consulta = db()->prepare('SELECT id, nome, senha, admin FROM usuarios WHERE usuario = ?');
         $consulta->execute([trim(campo('usuario'))]);
         $conta = $consulta->fetch();
         if ($conta && password_verify(campo('senha'), $conta['senha'])) {
             session_regenerate_id(true);
-            $_SESSION['token_vetcare'] = bin2hex(random_bytes(32));
-            $_SESSION['usuario'] = ['id' => $conta['id'], 'nome' => $conta['nome']];
+            $_SESSION['token'] = bin2hex(random_bytes(32));
+            $_SESSION['usuario'] = ['id' => $conta['id'], 'nome' => $conta['nome'], 'admin' => (bool) $conta['admin']];
             mensagem('Login realizado. Bem-vindo(a)!');
             ir('painel');
         }
         $erro = 'Usuário ou senha inválidos.';
     }
-}
 
-if (in_array($pagina, ['usuarios', 'agendamentos'], true)) {
-    // A página foi validada acima: só pode ser um destes dois nomes de tabela.
-    $tabela = $pagina;
-    $registro = null;
-    if ($id > 0) {
-        $consulta = db()->prepare("SELECT * FROM $tabela WHERE id = ?");
-        $consulta->execute([$id]);
-        $registro = $consulta->fetch();
-        if (!$registro) {
-            mensagem('Registro não encontrado.', 'erro');
-            ir($pagina);
-        }
-        $editar = $registro;
-    }
-
-    if ($metodoPost && (!in_array(campo('acao'), ['salvar', 'excluir'], true)
-        || (campo('acao') === 'excluir' && !$registro))) {
-        $erro = 'Ação inválida. Selecione um registro e tente novamente.';
-        $metodoPost = false;
-    }
-
-    if ($metodoPost && campo('acao') === 'excluir' && $registro) {
-        if ($pagina === 'usuarios' && $id === (int) $_SESSION['usuario']['id']) {
-            mensagem('Você não pode excluir o usuário que está usando.', 'erro');
-        } else {
-            $consulta = db()->prepare("DELETE FROM $tabela WHERE id = ?");
+    if (in_array($pagina, ['usuarios', 'agendamentos'], true)) {
+        // A página foi validada acima: só pode ser um destes dois nomes de tabela.
+        $tabela = $pagina;
+        if ($id > 0) {
+            $consulta = db()->prepare("SELECT * FROM $tabela WHERE id = ?");
             $consulta->execute([$id]);
-            $excluido = $consulta->rowCount() > 0;
-            mensagem($excluido ? ($pagina === 'usuarios' ? 'Usuário excluído com sucesso.' : 'Agendamento excluído com sucesso.') : 'Registro não encontrado.', $excluido ? 'sucesso' : 'erro');
-        }
-        ir($pagina);
-    }
-
-    if ($metodoPost && campo('acao') === 'salvar') {
-        if ($pagina === 'usuarios') {
-            $nome = trim(campo('nome'));
-            $usuario = trim(campo('usuario'));
-            $senha = campo('senha');
-            $editar = ['nome' => $nome, 'usuario' => $usuario];
-
-            if ($nome === '' || $usuario === '' || tamanho($nome) > 100 || tamanho($usuario) > 50) {
-                $erro = 'Preencha o nome e o usuário dentro dos limites do formulário.';
-            } elseif ((!$id || $senha !== '') && (tamanho($senha) < 6 || tamanho($senha) === PHP_INT_MAX || strlen($senha) > 72 || strpos($senha, "\0") !== false)) {
-                $erro = 'Use pelo menos 6 caracteres na senha. Se ela for muito longa, reduza-a: acentos e símbolos ocupam mais espaço.';
-            } else {
-                try {
-                    if (!$id) {
-                        $consulta = db()->prepare('INSERT INTO usuarios (nome, usuario, senha) VALUES (?, ?, ?)');
-                        $consulta->execute([$nome, $usuario, password_hash($senha, PASSWORD_DEFAULT)]);
-                    } elseif ($senha === '') {
-                        $consulta = db()->prepare('UPDATE usuarios SET nome = ?, usuario = ? WHERE id = ?');
-                        $consulta->execute([$nome, $usuario, $id]);
-                    } else {
-                        $consulta = db()->prepare('UPDATE usuarios SET nome = ?, usuario = ?, senha = ? WHERE id = ?');
-                        $consulta->execute([$nome, $usuario, password_hash($senha, PASSWORD_DEFAULT), $id]);
-                    }
-                    if ($id === (int) $_SESSION['usuario']['id']) {
-                        $_SESSION['usuario']['nome'] = $nome;
-                    }
-                } catch (PDOException $excecao) {
-                    if ((int) ($excecao->errorInfo[1] ?? 0) !== 1062) {
-                        throw $excecao;
-                    }
-                    $erro = 'Esse nome de usuário já está em uso.';
-                }
+            $registro = $consulta->fetch();
+            if (!$registro) {
+                mensagem('Registro não encontrado.', 'erro');
+                ir($pagina);
             }
-        } else {
-            $tutor = trim(campo('nome_tutor'));
-            $pet = trim(campo('nome_pet'));
-            $servico = trim(campo('servico'));
-            $horario = campo('data_hora');
-            $status = campo('status');
-            $observacoes = trim(campo('observacoes'));
-            $editar = ['nome_tutor' => $tutor, 'nome_pet' => $pet, 'servico' => $servico,
-                'data_hora' => $horario, 'status' => $status, 'observacoes' => $observacoes];
-            $data = preg_match('/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$/D', $horario)
-                ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', $horario)
-                : false;
-            if ($tutor === '' || $pet === '' || $servico === ''
-                || max(tamanho($tutor), tamanho($pet), tamanho($servico)) > 100
-                || !$data || $data->format('Y-m-d\TH:i') !== $horario
-                || !in_array($status, $statusLista, true) || tamanho($observacoes) > 1000) {
-                $erro = 'Confira os campos, a data, o horário e o status.';
+            $editar = $registro;
+        }
+
+        if ($metodoPost && (!in_array(campo('acao'), ['salvar', 'excluir'], true)
+            || (campo('acao') === 'excluir' && !$registro))) {
+            $erro = 'Ação inválida. Selecione um registro e tente novamente.';
+            $metodoPost = false;
+        }
+
+        if ($metodoPost && campo('acao') === 'excluir') {
+            if ($pagina === 'usuarios' && $id === (int) $_SESSION['usuario']['id']) {
+                mensagem('Você não pode excluir o usuário que está usando.', 'erro');
             } else {
-                $valores = [$tutor, $pet, $servico, $data->format('Y-m-d H:i:s'), $status, $observacoes];
-                if (!$id) {
-                    $consulta = db()->prepare('INSERT INTO agendamentos (nome_tutor, nome_pet, servico, data_hora, status, observacoes) VALUES (?, ?, ?, ?, ?, ?)');
+                $consulta = db()->prepare("DELETE FROM $tabela WHERE id = ?");
+                $consulta->execute([$id]);
+                if ($consulta->rowCount() > 0) {
+                    mensagem($pagina === 'usuarios' ? 'Usuário excluído com sucesso.' : 'Agendamento excluído com sucesso.');
                 } else {
-                    $consulta = db()->prepare('UPDATE agendamentos SET nome_tutor = ?, nome_pet = ?, servico = ?, data_hora = ?, status = ?, observacoes = ? WHERE id = ?');
-                    $valores[] = $id;
+                    mensagem('Registro não encontrado.', 'erro');
                 }
-                $consulta->execute($valores);
             }
-        }
-
-        if ($erro === '') {
-            $itemNome = $pagina === 'usuarios' ? 'Usuário' : 'Agendamento';
-            mensagem($itemNome . ($id ? ' alterado com sucesso.' : ' cadastrado com sucesso.'));
             ir($pagina);
         }
+
+        if ($metodoPost && campo('acao') === 'salvar') {
+            if ($pagina === 'usuarios') {
+                $nome = trim(campo('nome'));
+                $usuario = trim(campo('usuario'));
+                $senha = campo('senha');
+                // O admin não pode tirar o próprio acesso de administrador.
+                $admin = ($id === (int) $_SESSION['usuario']['id'] || campo('admin') === '1') ? 1 : 0;
+
+                if ($nome === '' || $usuario === '' || tamanho($nome) > 100 || tamanho($usuario) > 50) {
+                    $erro = 'Preencha o nome e o usuário dentro dos limites do formulário.';
+                } elseif ((!$id || $senha !== '') && (tamanho($senha) < 6 || tamanho($senha) === PHP_INT_MAX || strlen($senha) > 72 || strpos($senha, "\0") !== false)) {
+                    $erro = 'Use pelo menos 6 caracteres na senha. Se ela for muito longa, reduza-a: acentos e símbolos ocupam mais espaço.';
+                } else {
+                    try {
+                        if (!$id) {
+                            $consulta = db()->prepare('INSERT INTO usuarios (nome, usuario, senha, admin) VALUES (?, ?, ?, ?)');
+                            $consulta->execute([$nome, $usuario, password_hash($senha, PASSWORD_DEFAULT), $admin]);
+                        } elseif ($senha === '') {
+                            $consulta = db()->prepare('UPDATE usuarios SET nome = ?, usuario = ?, admin = ? WHERE id = ?');
+                            $consulta->execute([$nome, $usuario, $admin, $id]);
+                        } else {
+                            $consulta = db()->prepare('UPDATE usuarios SET nome = ?, usuario = ?, senha = ?, admin = ? WHERE id = ?');
+                            $consulta->execute([$nome, $usuario, password_hash($senha, PASSWORD_DEFAULT), $admin, $id]);
+                        }
+                    } catch (PDOException $excecao) {
+                        if ((int) ($excecao->errorInfo[1] ?? 0) !== 1062) {
+                            throw $excecao;
+                        }
+                        $erro = 'Esse nome de usuário já está em uso.';
+                    }
+                }
+            } else {
+                $tutor = trim(campo('nome_tutor'));
+                $pet = trim(campo('nome_pet'));
+                $servico = campo('servico');
+                $horario = campo('data_hora');
+                $status = campo('status');
+                $observacoes = trim(campo('observacoes'));
+                $data = preg_match('/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$/D', $horario)
+                    ? DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', $horario)
+                    : false;
+                // Agendamentos antigos podem ter um serviço fora da lista: ele continua aceito na edição.
+                $servicoValido = isset($servicos[$servico]) || ($registro && $servico === $registro['servico']);
+
+                if ($tutor === '' || $pet === '' || !$servicoValido
+                    || max(tamanho($tutor), tamanho($pet)) > 100
+                    || !$data || $data->format('Y-m-d\TH:i') !== $horario
+                    || !in_array($status, $statusLista, true) || tamanho($observacoes) > 1000) {
+                    $erro = 'Confira os campos, o serviço, a data, o horário e o status.';
+                } else {
+                    $dataBanco = $data->format('Y-m-d H:i:s');
+                    // Dois agendamentos ativos não podem ocupar o mesmo horário.
+                    $ocupado = false;
+                    if ($status !== 'Cancelado') {
+                        $consulta = db()->prepare("SELECT COUNT(*) FROM agendamentos
+                            WHERE data_hora = ? AND status <> 'Cancelado' AND id <> ?");
+                        $consulta->execute([$dataBanco, $id]);
+                        $ocupado = $consulta->fetchColumn() > 0;
+                    }
+                    if ($ocupado) {
+                        $erro = 'Já existe um agendamento neste horário. Escolha outro horário.';
+                    } else {
+                        $valores = [$tutor, $pet, $servico, $dataBanco, $status, $observacoes];
+                        if (!$id) {
+                            $consulta = db()->prepare('INSERT INTO agendamentos (nome_tutor, nome_pet, servico, data_hora, status, observacoes) VALUES (?, ?, ?, ?, ?, ?)');
+                        } else {
+                            $consulta = db()->prepare('UPDATE agendamentos SET nome_tutor = ?, nome_pet = ?, servico = ?, data_hora = ?, status = ?, observacoes = ? WHERE id = ?');
+                            $valores[] = $id;
+                        }
+                        $consulta->execute($valores);
+                    }
+                }
+            }
+
+            if ($erro === '') {
+                $itemNome = $pagina === 'usuarios' ? 'Usuário' : 'Agendamento';
+                mensagem($itemNome . ($id ? ' alterado com sucesso.' : ' cadastrado com sucesso.'));
+                ir($pagina);
+            }
+        }
+
+        $registros = $pagina === 'usuarios'
+            ? db()->query('SELECT id, nome, usuario, admin FROM usuarios ORDER BY nome')->fetchAll()
+            : db()->query('SELECT * FROM agendamentos ORDER BY data_hora DESC')->fetchAll();
     }
 
-    $registros = $pagina === 'usuarios'
-        ? db()->query('SELECT id, nome, usuario FROM usuarios ORDER BY nome')->fetchAll()
-        : db()->query('SELECT * FROM agendamentos ORDER BY data_hora DESC')->fetchAll();
-}
-
-if ($pagina === 'painel') {
-    $agora = new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo'));
-    $consulta = db()->prepare("SELECT nome_pet, nome_tutor, servico, data_hora, status
-        FROM agendamentos WHERE data_hora >= ? AND status IN ('Agendado', 'Confirmado')
-        ORDER BY data_hora, id LIMIT 5");
-    $consulta->execute([$agora->format('Y-m-d H:i:s')]);
-    $proximos = $consulta->fetchAll();
-}
+    if ($pagina === 'painel') {
+        $consulta = db()->prepare("SELECT nome_pet, nome_tutor, servico, data_hora, status
+            FROM agendamentos WHERE data_hora >= ? AND status IN ('Agendado', 'Confirmado')
+            ORDER BY data_hora, id LIMIT 5");
+        $consulta->execute([date('Y-m-d H:i:s')]);
+        $proximos = $consulta->fetchAll();
+    }
 } catch (PDOException $excecao) {
     http_response_code(503);
     $falhaBanco = true;
@@ -231,28 +263,29 @@ if ($pagina === 'painel') {
 // Conserva os campos para corrigir e reenviar; senhas nunca voltam ao HTML.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && campo('acao') === 'salvar') {
     $editar = [];
-    foreach (['nome', 'usuario', 'nome_tutor', 'nome_pet', 'servico', 'data_hora', 'status', 'observacoes'] as $chave) {
+    foreach (['nome', 'usuario', 'admin', 'nome_tutor', 'nome_pet', 'servico', 'data_hora', 'status', 'observacoes'] as $chave) {
         $editar[$chave] = campo($chave);
     }
 }
 
-$titulos = ['login' => 'Entrar', 'painel' => 'Painel', 'usuarios' => 'Usuários', 'agendamentos' => 'Agendamentos'];
+$titulos = ['inicio' => 'Início', 'login' => 'Entrar', 'painel' => 'Painel', 'usuarios' => 'Usuários', 'agendamentos' => 'Agendamentos'];
 $statusClasses = ['Agendado' => 'pendente', 'Confirmado' => 'confirmado', 'Concluído' => 'concluido', 'Cancelado' => 'cancelado'];
-$aviso = $_SESSION['aviso_vetcare'] ?? '';
-$tipoAviso = ($_SESSION['tipo_aviso_vetcare'] ?? '') === 'erro' ? 'erro' : 'sucesso';
-unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
+$menu = $ehAdmin ? ['painel', 'agendamentos', 'usuarios'] : ['painel', 'agendamentos'];
+$aviso = $_SESSION['aviso'] ?? '';
+$tipoAviso = ($_SESSION['tipo_aviso'] ?? '') === 'erro' ? 'erro' : 'sucesso';
+unset($_SESSION['aviso'], $_SESSION['tipo_aviso']);
 ?>
 <!doctype html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($titulos[$pagina]) ?> | Pata Nobre</title>
-    <script src="feedback.js?v=1" defer></script>
-    <meta name="theme-color" content="#29231f">
-    <link rel="stylesheet" href="vetcare.css?v=feedback-1">
+    <title><?= $pagina === 'inicio' ? 'Pata Nobre Pet Shop' : e($titulos[$pagina]) . ' | Pata Nobre' ?></title>
+    <meta name="theme-color" content="#ffffff">
+    <link rel="stylesheet" href="estilo.css?v=3">
+    <script src="feedback.js?v=2" defer></script>
 </head>
-<body class="<?= $pagina === 'login' ? 'tela-login' : 'aplicativo' ?>">
+<body class="<?= $paginaInterna ? 'aplicativo' : 'tela-' . $pagina ?>">
 <svg class="icones" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icone-painel" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="icone-agendamentos" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h3m2 0h3"/></symbol>
@@ -260,11 +293,20 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
     <symbol id="icone-sair" viewBox="0 0 24 24"><path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5m4-12 4 4-4 4m-7-4h11"/></symbol>
 </svg>
 
-<?php if ($pagina !== 'login'): ?>
-<aside class="barra">
+<?php if ($pagina === 'inicio'): ?>
+<header class="barra">
+    <a class="marca" href="?pagina=inicio"><img class="logo-menu" src="logo-pata-nobre.png" alt="Pata Nobre Pet Shop" width="1536" height="1024"></a>
+    <nav class="menu-site" aria-label="Seções da página">
+        <a href="#servicos">Serviços</a>
+        <a href="#como-agendar">Como agendar</a>
+    </nav>
+    <a class="botao" href="?pagina=<?= logged_in() ? 'painel' : 'login' ?>"><?= logged_in() ? 'Ir para o painel' : 'Área do funcionário' ?></a>
+</header>
+<?php elseif ($paginaInterna): ?>
+<header class="barra">
     <a class="marca" href="?pagina=painel"><img class="logo-menu" src="logo-pata-nobre.png" alt="Pata Nobre Pet Shop" width="1536" height="1024"></a>
     <nav aria-label="Menu principal">
-        <?php foreach (['painel', 'agendamentos', 'usuarios'] as $secao): ?>
+        <?php foreach ($menu as $secao): ?>
             <a href="?pagina=<?= $secao ?>"<?= $pagina === $secao ? ' aria-current="page"' : '' ?>>
                 <svg aria-hidden="true"><use href="#icone-<?= $secao ?>"/></svg><?= e($titulos[$secao]) ?>
             </a>
@@ -272,10 +314,11 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
     </nav>
     <form method="post" action="?pagina=painel" class="sessao">
         <input type="hidden" name="token" value="<?= e($token) ?>">
-        <span class="conta"><?= e($_SESSION['usuario']['nome']) ?></span>
+        <span class="conta"><?= e($_SESSION['usuario']['nome']) ?><?= $ehAdmin ? ' (admin)' : '' ?></span>
+        <a class="sair" href="?pagina=inicio">Página inicial</a>
         <button name="acao" value="sair" class="sair"><svg aria-hidden="true"><use href="#icone-sair"/></svg>Sair</button>
     </form>
-</aside>
+</header>
 <?php endif; ?>
 
 <div class="feedback-area" aria-label="Notificações">
@@ -287,10 +330,59 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
     <?php endif; ?>
 </div>
 <main id="conteudo">
-    <?php if ($pagina === 'login'): ?>
+    <?php if ($pagina === 'inicio'): ?>
+        <section class="destaque">
+            <div class="destaque-texto">
+                <p class="selo">Banho, tosa e cuidados com hora marcada</p>
+                <h1>Cuidado e carinho para o seu pet</h1>
+                <p>No Pata Nobre Pet Shop seu cão ou gato recebe atenção de verdade, com produtos adequados e uma equipe que trata cada pet como se fosse da família.</p>
+                <div class="acoes">
+                    <a class="botao" href="#servicos">Conheça nossos serviços</a>
+                    <a class="botao botao-claro" href="#como-agendar">Como agendar</a>
+                </div>
+            </div>
+            <div class="destaque-imagem">
+                <img src="logo-pata-nobre.png" alt="" width="1536" height="1024">
+            </div>
+        </section>
+
+        <ul class="diferenciais">
+            <li><strong>Equipe cuidadosa</strong><span>Atendimento calmo e paciente, respeitando o jeito de cada pet.</span></li>
+            <li><strong>Hora marcada</strong><span>Seu pet é atendido no horário combinado, sem longas esperas.</span></li>
+            <li><strong>Produtos adequados</strong><span>Escolhidos de acordo com a pelagem e a pele do animal.</span></li>
+        </ul>
+
+        <section class="servicos" id="servicos" aria-labelledby="titulo-servicos">
+            <h2 id="titulo-servicos">Nossos serviços</h2>
+            <p class="secao-descricao">Tudo o que o seu pet precisa para ficar limpo, cheiroso e confortável.</p>
+            <ul>
+                <?php foreach ($servicos as $nomeServico => $descricaoServico): ?>
+                    <li><strong><?= e($nomeServico) ?></strong><span><?= e($descricaoServico) ?></span></li>
+                <?php endforeach; ?>
+            </ul>
+        </section>
+
+        <section class="passos" id="como-agendar" aria-labelledby="titulo-passos">
+            <h2 id="titulo-passos">Como agendar</h2>
+            <ol>
+                <li><strong>Escolha o serviço</strong><span>Veja acima o que o seu pet precisa.</span></li>
+                <li><strong>Fale com a nossa equipe</strong><span>Na loja, combinamos o melhor dia e horário.</span></li>
+                <li><strong>Traga seu pet</strong><span>O horário fica registrado no nosso sistema e reservado para você.</span></li>
+            </ol>
+        </section>
+
+        <section class="chamada">
+            <h2>Seu pet merece um dia de cuidado</h2>
+            <p>Venha nos visitar e agende um horário com a nossa equipe.</p>
+        </section>
+        <footer class="rodape">
+            <span>© <?= date('Y') ?> Pata Nobre Pet Shop</span>
+            <a href="?pagina=login">Área do funcionário</a>
+        </footer>
+    <?php elseif ($pagina === 'login'): ?>
         <section class="acesso" aria-labelledby="titulo-acesso">
             <img class="logo-login" src="logo-pata-nobre.png" alt="Pata Nobre Pet Shop" width="1536" height="1024">
-            <h1 id="titulo-acesso">Entrar no sistema</h1>
+            <h1 id="titulo-acesso">Área do funcionário</h1>
             <p class="descricao">Use sua conta para acessar o painel.</p>
             <?php if ($erro !== ''): ?><p class="erro" role="alert"><?= e($erro) ?></p><?php endif; ?>
             <form method="post" action="?pagina=login" class="formulario">
@@ -299,6 +391,7 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
                 <label>Senha <input name="senha" type="password" autocomplete="current-password" required></label>
                 <button>Entrar</button>
             </form>
+            <p class="voltar"><a href="?pagina=inicio">← Voltar para o início</a></p>
         </section>
     <?php elseif ($pagina === 'painel'): ?>
         <header class="cabecalho">
@@ -343,9 +436,24 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
             <input type="hidden" name="token" value="<?= e($token) ?>">
             <input type="hidden" name="id" value="<?= $id ?>">
             <?php if ($agenda): ?>
+                <?php
+                $opcoesServico = array_keys($servicos);
+                // Mantém visível um serviço antigo que não está mais na lista.
+                if ($registro && !isset($servicos[$registro['servico']])) {
+                    $opcoesServico[] = $registro['servico'];
+                }
+                $servicoAtual = $editar['servico'] ?? '';
+                ?>
                 <label>Nome do tutor <input name="nome_tutor" maxlength="100" required value="<?= e($editar['nome_tutor'] ?? '') ?>"></label>
                 <label>Nome do pet <input name="nome_pet" maxlength="100" required value="<?= e($editar['nome_pet'] ?? '') ?>"></label>
-                <label>Serviço <input name="servico" maxlength="100" placeholder="Ex.: Banho e tosa" required value="<?= e($editar['servico'] ?? '') ?>"></label>
+                <label>Serviço
+                    <select name="servico" required>
+                        <option value="">Selecione o serviço</option>
+                        <?php foreach ($opcoesServico as $opcao): ?>
+                            <option<?= $opcao === $servicoAtual ? ' selected' : '' ?>><?= e($opcao) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
                 <label>Data e horário <input type="datetime-local" name="data_hora" required value="<?= e(str_replace(' ', 'T', substr($editar['data_hora'] ?? '', 0, 16))) ?>"></label>
                 <label>Status
                     <select name="status">
@@ -356,10 +464,15 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
                 </label>
                 <label>Observações (opcional) <textarea name="observacoes" rows="2" maxlength="1000"><?= e($editar['observacoes'] ?? '') ?></textarea></label>
             <?php else: ?>
+                <?php $editandoAPropriaConta = $id === (int) $_SESSION['usuario']['id']; ?>
                 <label>Nome <input name="nome" maxlength="100" required value="<?= e($editar['nome'] ?? '') ?>"></label>
                 <label>Usuário <input name="usuario" maxlength="50" required value="<?= e($editar['usuario'] ?? '') ?>"></label>
                 <label><?= $id ? 'Nova senha (opcional)' : 'Senha (mínimo de 6 caracteres)' ?>
                     <input type="password" name="senha" autocomplete="new-password" minlength="6" maxlength="72" <?= $id ? '' : 'required' ?>>
+                </label>
+                <label class="opcao">
+                    <input type="checkbox" name="admin" value="1"<?= ($editandoAPropriaConta || !empty($editar['admin'])) ? ' checked' : '' ?><?= $editandoAPropriaConta ? ' disabled' : '' ?>>
+                    Administrador (pode gerenciar usuários)
                 </label>
             <?php endif; ?>
             <div class="acoes">
@@ -367,8 +480,8 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
                 <?php if ($id): ?><a href="?pagina=<?= $pagina ?>" data-cancelar-edicao>Cancelar</a><?php endif; ?>
             </div>
         </form>
-
         </section>
+
         <section class="quadro lista" aria-labelledby="titulo-lista">
         <div class="quadro-topo"><h2 id="titulo-lista"><?= $agenda ? 'Horários cadastrados' : 'Usuários cadastrados' ?></h2><span class="contagem"><?= $falhaBanco ? '—' : count($registros) ?></span></div>
         <?php if ($falhaBanco): ?>
@@ -382,7 +495,7 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
                     <?php if ($agenda): ?>
                         <tr><th>Data e hora</th><th>Pet e tutor</th><th>Serviço</th><th>Status</th><th>Ações</th></tr>
                     <?php else: ?>
-                        <tr><th>Nome</th><th>Usuário</th><th>Ações</th></tr>
+                        <tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Ações</th></tr>
                     <?php endif; ?>
                     </thead>
                     <tbody>
@@ -394,12 +507,14 @@ unset($_SESSION['aviso_vetcare'], $_SESSION['tipo_aviso_vetcare']);
                                 <td><?= e($item['servico']) ?></td>
                                 <td><span class="status <?= $statusClasses[$item['status']] ?? '' ?>"><?= e($item['status']) ?></span></td>
                             <?php else: ?>
-                                <td><?= e($item['nome']) ?></td><td><?= e($item['usuario']) ?></td>
+                                <td><?= e($item['nome']) ?></td>
+                                <td><?= e($item['usuario']) ?></td>
+                                <td><?= $item['admin'] ? 'Administrador' : 'Funcionário' ?></td>
                             <?php endif; ?>
                             <td class="acoes">
                                 <a href="?pagina=<?= $pagina ?>&amp;editar=<?= (int) $item['id'] ?>#formulario">Editar</a>
                                 <?php if ($agenda || (int) $item['id'] !== (int) $_SESSION['usuario']['id']): ?>
-                                    <form method="post" action="?pagina=<?= $pagina ?>" onsubmit="return window.confirmarExclusao ? window.confirmarExclusao() : confirm('Confirma a exclusão deste registro?')">
+                                    <form method="post" action="?pagina=<?= $pagina ?>" onsubmit="return confirmarExclusao()">
                                         <input type="hidden" name="token" value="<?= e($token) ?>">
                                         <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
                                         <button class="excluir" name="acao" value="excluir">Excluir</button>
